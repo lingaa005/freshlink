@@ -34,6 +34,8 @@ class Producer(models.Model):
 class Vendor(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     street_location = models.CharField(max_length=255)
+    def __str__(self):
+        return f"{self.user.username}"
 
 # ----------------------------
 # Ratings + Complaint Flag
