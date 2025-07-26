@@ -10,7 +10,19 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from .models import Vendor  # adjust import path if needed
+from django.contrib.auth import authenticate, get_user_model
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.authentication import TokenAuthentication
+from rest_framework.authtoken.models import Token
+from .models import ChatMessage
+from .serializers import SignupSerializer, LoginSerializer, ChatMessageSerializer
+from django.db.models import Q
+from .serializers import ChatMessageSerializer
+from rest_framework import generics, permissions
+from django.contrib.auth.models import User
+from rest_framework import status
 
+User = get_user_model()
 
 class VendorGroupChatListCreateAPIView(generics.ListCreateAPIView):
     queryset = VendorGroupChatMessage.objects.all().order_by('timestamp')
@@ -81,3 +93,102 @@ class SubmitRatingView(APIView):
             rating = serializer.save()
             return Response({"detail": "Rating submitted successfully."}, status=201)
         return Response(serializer.errors, status=400)
+class SignupView(APIView):
+    def post(self, request):
+        serializer = SignupSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            token = Token.objects.get(user=user)
+            return Response({"message": "User created", "token": token.key}, status=201)
+        return Response(serializer.errors, status=400)
+
+# Login
+class LoginView(APIView):
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        if serializer.is_valid():
+            username = serializer.validated_data['username']
+            password = serializer.validated_data['password']
+            user = authenticate(username=username, password=password)
+            if user:
+                token, _ = Token.objects.get_or_create(user=user)
+                return Response({"message": "Login successful", "token": token.key})
+            return Response({"error": "Invalid credentials"}, status=401)
+        return Response(serializer.errors, status=400)
+
+# Logout
+class LogoutView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        request.user.auth_token.delete()
+        return Response({"message": "Logged out successfully"}, status=200)
+
+# Send Message
+class ChatMessageCreateView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        sender = request.user
+        receiver_id = request.data.get('receiver')
+        message = request.data.get('message')
+
+        if not receiver_id or not message:
+            return Response({'error': 'Receiver and message are required'}, status=400)
+
+        try:
+            receiver = User.objects.get(id=receiver_id)
+        except User.DoesNotExist:
+            return Response({'error': 'Receiver not found'}, status=404)
+
+        chat_message = ChatMessage.objects.create(sender=sender, receiver=receiver, message=message)
+        serializer = ChatMessageSerializer(chat_message)
+        return Response(serializer.data, status=201)
+
+# Get Conversation
+class ChatMessageListView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id):
+        current_user = request.user
+        try:
+            other_user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=404)
+
+        messages = ChatMessage.objects.filter(
+            Q(sender=current_user, receiver=other_user) |
+            Q(sender=other_user, receiver=current_user)
+        ).order_by('timestamp')
+
+        serializer = ChatMessageSerializer(messages, many=True)
+        return Response(serializer.data)
+
+class SentMessagesView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        sent_messages = ChatMessage.objects.filter(sender=user).order_by('-timestamp')
+        serializer = ChatMessageSerializer(sent_messages, many=True)
+        return Response(serializer.data)
+
+
+class AllUserMessagesView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+
+        # Fetch both sent and received messages
+        messages = ChatMessage.objects.filter(
+            Q(sender=user) | Q(receiver=user)
+        ).order_by('timestamp')
+
+        serializer = ChatMessageSerializer(messages, many=True)
+        return Response(serializer.data)

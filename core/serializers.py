@@ -1,6 +1,9 @@
 from rest_framework import serializers
 from .models import VendorGroupChatMessage,Producer,Vendor,User,Rating
 from django.db.models import Avg
+from django.contrib.auth import get_user_model
+from .models import ChatMessage
+from rest_framework.authtoken.models import Token
 
 
 class VendorGroupChatMessageSerializer(serializers.ModelSerializer):
@@ -65,3 +68,34 @@ class RatingCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("You have already rated this producer.")
 
         return Rating.objects.create(vendor=vendor, producer=producer, **validated_data)
+User = get_user_model()
+
+class SignupSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['username', 'password', 'email', 'role']
+        extra_kwargs = {'password': {'write_only': True}}
+
+    def create(self, validated_data):
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data.get('email'),
+            password=validated_data['password'],
+            role=validated_data['role']
+        )
+        Token.objects.create(user=user)
+        return user
+
+
+class LoginSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    password = serializers.CharField()
+
+
+class ChatMessageSerializer(serializers.ModelSerializer):
+    sender_username = serializers.CharField(source='sender.username', read_only=True)
+    receiver_username = serializers.CharField(source='receiver.username', read_only=True)
+
+    class Meta:
+        model = ChatMessage
+        fields = ['id', 'sender', 'sender_username', 'receiver', 'receiver_username', 'message', 'timestamp']
