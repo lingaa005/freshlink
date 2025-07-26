@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-ncmcme_nud1wnd!+7l2bc1)28(48x3c!d$te56e+c6o)y5o3m8
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -136,3 +136,4 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ]
 }
+CORS_ALLOW_ALL_ORIGINS = True
