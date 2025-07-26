@@ -44,3 +44,24 @@ class ProducerReviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Rating
         fields = ['id', 'vendor', 'rating', 'review', 'is_safety_concern', 'created_at']
+class RatingCreateSerializer(serializers.ModelSerializer):
+    producer_id = serializers.IntegerField(write_only=True)
+
+    class Meta:
+        model = Rating
+        fields = ['producer_id', 'rating', 'review', 'is_safety_concern']
+
+    def validate_producer_id(self, value):
+        if not Producer.objects.filter(id=value).exists():
+            raise serializers.ValidationError("Producer not found.")
+        return value
+
+    def create(self, validated_data):
+        vendor = self.context['request'].user.vendor
+        producer = Producer.objects.get(id=validated_data.pop('producer_id'))
+
+        # Optional: prevent duplicate reviews
+        if Rating.objects.filter(vendor=vendor, producer=producer).exists():
+            raise serializers.ValidationError("You have already rated this producer.")
+
+        return Rating.objects.create(vendor=vendor, producer=producer, **validated_data)

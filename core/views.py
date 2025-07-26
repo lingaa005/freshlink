@@ -5,7 +5,7 @@ from rest_framework.exceptions import PermissionDenied
 from .models import VendorGroupChatMessage,Producer,Rating
 from .serializers import (
     VendorGroupChatMessageSerializer,ProducerSerializer,ProducerDetailSerializer
-    ,ProducerReviewSerializer)
+    ,ProducerReviewSerializer,RatingCreateSerializer)
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
@@ -68,3 +68,16 @@ class ProducerOwnReviewsAPIView(generics.ListAPIView):
 
         producer = Producer.objects.get(user=user)
         return Rating.objects.filter(producer=producer).select_related('vendor__user')
+class SubmitRatingView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        if not hasattr(user, 'vendor'):
+            return Response({"detail": "Only vendors can submit ratings."}, status=403)
+
+        serializer = RatingCreateSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            rating = serializer.save()
+            return Response({"detail": "Rating submitted successfully."}, status=201)
+        return Response(serializer.errors, status=400)
